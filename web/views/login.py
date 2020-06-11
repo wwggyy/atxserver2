@@ -5,6 +5,7 @@ from logzero import logger
 
 from .auth import AuthError, OpenIdMixin
 from .base import BaseRequestHandler
+from .cas_login import get_key, login, validate
 
 from ..settings import AUTH_BACKENDS
 
@@ -29,18 +30,36 @@ class OpenIdLoginHandler(BaseRequestHandler, OpenIdMixin):
             self.authenticate_redirect()
 
 
+import time
 class SimpleLoginHandler(BaseRequestHandler):
     def get(self):
-        self.set_cookie("next", self.get_argument("next", "/"))
+        #self.set_cookie("next", self.get_argument("next", "/"))
         self.write('<html><body><form action="/login" method="post">'
                    'Name: <input type="text" name="name" required>'
+                   'password: <input type="password" name="password" required>'
                    '<input type="submit" value="Sign in">'
                    '</form></body></html>')
 
     async def post(self):
         name = self.get_argument("name")
-        email = name + "@anonymous.com"
-        await self.set_current_user(email, name)
-        next_url = self.get_cookie("next", "/")
-        self.clear_cookie("next")
-        self.redirect(next_url)
+        pwd = self.get_argument("password")
+        kid, pkey=get_key()
+        device=int(time.time())
+        login_param={
+        'appName': 'CAS',  # 系统编码
+        'username': name,  # 用户名
+        'password': pwd,  # 密码
+        'device': device,  # 不确定可以填写时间戳
+        }
+        log_param=login_param
+        tgt=login(kid, pkey, log_param)
+        resp=validate(tgt)
+        if(resp['status']){
+            email=name + "@anonymous.com"
+            await self.set_current_user(email, name)
+            next_url=self.get_cookie("next", "/")
+            self.clear_cookie("next")
+            self.redirect(next_url)
+        }
+        
+        
